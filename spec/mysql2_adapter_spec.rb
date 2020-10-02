@@ -71,6 +71,41 @@ describe Polymorpheus::ConnectionAdapters::MysqlAdapter do
       EOS
     end
 
+    it 'adds foreign keys with no uniqueness constraints when nullable' do
+      add_polymorphic_constraints(
+        'pets',
+        { cat_id: 'cats.id', dog_id: 'dogs.id' },
+        { nullable: true }
+      )
+
+      should_execute_sql <<-EOS
+        DROP TRIGGER IF EXISTS pfki_pets_catid_dogid
+        DROP TRIGGER IF EXISTS pfku_pets_catid_dogid
+        CREATE TRIGGER pfki_pets_catid_dogid BEFORE INSERT ON pets
+          FOR EACH ROW
+            BEGIN
+              IF(IF(NEW.cat_id IS NULL, 0, 1) + IF(NEW.dog_id IS NULL, 0, 1)) >= 1 THEN
+                SET NEW = 'Error';
+              END IF;
+            END
+        CREATE TRIGGER pfku_pets_catid_dogid BEFORE UPDATE ON pets
+          FOR EACH ROW
+            BEGIN
+              IF(IF(NEW.cat_id IS NULL, 0, 1) + IF(NEW.dog_id IS NULL, 0, 1)) >= 1 THEN
+                SET NEW = 'Error';
+              END IF;
+            END
+
+        ALTER TABLE `pets` ADD CONSTRAINT `pets_cat_id_fk`
+        FOREIGN KEY (`cat_id`)
+        REFERENCES `cats`(id)
+
+        ALTER TABLE `pets` ADD CONSTRAINT `pets_dog_id_fk`
+        FOREIGN KEY (`dog_id`)
+        REFERENCES `dogs`(id)
+      EOS
+    end
+
     it 'adds uniqueness specified with true' do
       add_polymorphic_constraints(
         'pets',

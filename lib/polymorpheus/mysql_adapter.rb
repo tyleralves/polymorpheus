@@ -61,8 +61,12 @@ module Polymorpheus
 
       def add_polymorphic_constraints(table, columns, options={})
         column_names = columns.keys.sort
-        add_polymorphic_triggers(table, column_names)
         options.symbolize_keys!
+        if options[:nullable].present?
+          add_polymorphic_triggers(table, column_names, nullable: true)
+        else
+          add_polymorphic_triggers(table, column_names)
+        end
         if options[:unique].present?
           poly_create_indexes(table, column_names, Array(options[:unique]))
         end
@@ -99,10 +103,10 @@ module Polymorpheus
       # reason it is here is because it is used by the schema dumper, since
       # the schema dump will contains separate statements for foreign keys,
       # and we don't want to duplicate those
-      def add_polymorphic_triggers(table, column_names)
+      def add_polymorphic_triggers(table, column_names, nullable = false)
         column_names.sort!
         poly_drop_triggers(table, column_names)
-        poly_create_triggers(table, column_names)
+        poly_create_triggers(table, column_names, nullable)
       end
 
 
@@ -136,14 +140,36 @@ module Polymorpheus
         execute sql
       end
 
+      def poly_create_trigger_nullable(table, action, columns)
+        trigger_name = poly_trigger_name(table, action, columns)
+        colchecks = columns.collect { |col| "IF(NEW.#{col} IS NULL, 0, 1)" }.
+          join(' + ')
+
+        sql = %{
+            CREATE TRIGGER #{trigger_name} BEFORE #{action} ON #{table}
+              FOR EACH ROW
+              BEGIN
+                IF(#{colchecks}) >= 1 THEN
+                  SET NEW = 'Error';
+                END IF;
+              END}
+
+        execute sql
+      end
+
       def poly_drop_triggers(table, columns)
         poly_drop_trigger(table, 'INSERT', columns)
         poly_drop_trigger(table, 'UPDATE', columns)
       end
 
-      def poly_create_triggers(table, columns)
-        poly_create_trigger(table, 'INSERT', columns)
-        poly_create_trigger(table, 'UPDATE', columns)
+      def poly_create_triggers(table, columns, nullable = false)
+        if nullable
+          poly_create_trigger_nullable(table, 'INSERT', columns)
+          poly_create_trigger_nullable(table, 'UPDATE', columns)
+        else
+          poly_create_trigger(table, 'INSERT', columns)
+          poly_create_trigger(table, 'UPDATE', columns)
+        end
       end
 
       def poly_create_index(table, column, unique_cols)
