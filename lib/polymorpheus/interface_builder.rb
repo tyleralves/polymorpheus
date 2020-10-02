@@ -16,6 +16,7 @@ module Polymorpheus
     def exposed_interface(calling_object)
       OpenStruct.new(
         associations: associations,
+        mutually_exclusive: mutually_exclusive(calling_object),
         active_association: active_association(calling_object),
         query_condition: query_condition(calling_object)
       )
@@ -29,8 +30,8 @@ module Polymorpheus
       @association_names ||= associations.map(&:name)
     end
 
-    def active_association(calling_object)
-      active_associations = associations.select do |association|
+    def select_active_associations(calling_object)
+      associations.select do |association|
         # If the calling object has a non-nil value for the association
         # key, we know it has an active associatin without having to
         # make a database query to retrieve the associated object itself.
@@ -43,6 +44,16 @@ module Polymorpheus
         calling_object.public_send(association.key).present? ||
           calling_object.public_send(association.name).present?
       end
+    end
+
+    def mutually_exclusive(calling_object)
+      active_associations = select_active_associations(calling_object)
+
+      active_associations.length <= 1
+    end
+
+    def active_association(calling_object)
+      active_associations = select_active_associations(calling_object)
 
       active_associations.first if active_associations.length == 1
     end

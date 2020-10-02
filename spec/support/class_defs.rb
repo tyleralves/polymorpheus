@@ -37,6 +37,12 @@ class StoryArc < ActiveRecord::Base
   validates_polymorph :character
 end
 
+class StoryArcNullable < ActiveRecord::Base
+  belongs_to_polymorphic :hero, :villain, as: :character
+  belongs_to :battle
+  validates_polymorph :character, nullable: true
+end
+
 class Battle < ActiveRecord::Base
   has_many :story_arcs
   has_many :heros, through: :story_arcs
